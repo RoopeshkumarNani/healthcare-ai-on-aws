@@ -21,8 +21,8 @@ For interviewers: see `docs/ARCHITECTURE.md` for concise architecture rationales
 - [x] DynamoDB setup  
 - [x] Lambda functions for file processing  
 - [x] Bedrock integration for AI insights  
-- [ ] API Gateway for exposing endpoints  
-- [ ] Frontend / dashboard (optional)  
+- [X] API Gateway for exposing endpoints  
+- [X] Frontend / dashboard (optional)  
 
 ---
 
