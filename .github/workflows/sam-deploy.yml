@@ -20,6 +20,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -33,34 +38,38 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install aws-sam-cli
 
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
       - name: Debug - list workspace
         run: |
           echo "PWD: $(pwd)"
-          echo "Workspace root listing:"; ls -la
-          echo "infra listing:"; ls -la infra || true
+          echo "Workspace root listing:"
+          ls -la
+          echo "infra listing:"
+          ls -la infra || true
 
       - name: Debug - find templates and env
         run: |
           echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
-          echo "Finding template files:"; find . -maxdepth 4 -type f -name 'template*.y*' -print || true
-          echo "Print infra/template.yml head (if exists):"; sed -n '1,20p' infra/template.yml || true
+          echo "Finding template files:"
+          find . -maxdepth 4 -type f -name 'template*.y*' -print || true
+          echo "Print infra/sam-template.yaml head (if exists):"
+          sed -n '1,20p' infra/sam-template.yaml || true
 
       - name: Build SAM app
-        run: sam build --template-file "$GITHUB_WORKSPACE/infra/sam-template.yaml"
+        run: |
+          cd infra
+          sam build --template-file sam-template.yaml
+          cd ..
 
       - name: Deploy SAM app
         env:
           S3_BUCKET: ${{ secrets.SAM_PACKAGE_BUCKET }}
           STACK_NAME_BASE: ${{ secrets.SAM_STACK_NAME }}
           NAME_PREFIX: ${{ secrets.SAM_NAME_PREFIX }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
           if [ -z "$S3_BUCKET" ]; then
-            echo "SAM_PACKAGE_BUCKET secret is required"; exit 1
+            echo "SAM_PACKAGE_BUCKET secret is required"
+            exit 1
           fi
           # If the secret base is empty, fall back to repo-based name to avoid relying on secrets
           if [ -z "$STACK_NAME_BASE" ]; then
@@ -73,16 +82,19 @@ jobs:
           TS=$(date +%s)
           STACK_NAME="${STACK_NAME_BASE}-${TS}"
           echo "Using stack name: $STACK_NAME"
+          cd infra
           if [ -n "$NAME_PREFIX" ]; then
-            sam deploy --template-file "$GITHUB_WORKSPACE/infra/sam-template.yaml" --stack-name "$STACK_NAME" --s3-bucket "$S3_BUCKET" --parameter-overrides NamePrefix=$NAME_PREFIX --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region ${{ secrets.AWS_REGION }} --no-confirm-changeset --no-fail-on-empty-changeset
+            sam deploy --template-file sam-template.yaml --stack-name "$STACK_NAME" --s3-bucket "$S3_BUCKET" --parameter-overrides NamePrefix=$NAME_PREFIX --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region "$AWS_REGION" --no-confirm-changeset --no-fail-on-empty-changeset
           else
-            sam deploy --template-file "$GITHUB_WORKSPACE/infra/sam-template.yaml" --stack-name "$STACK_NAME" --s3-bucket "$S3_BUCKET" --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region ${{ secrets.AWS_REGION }} --no-confirm-changeset --no-fail-on-empty-changeset
+            sam deploy --template-file sam-template.yaml --stack-name "$STACK_NAME" --s3-bucket "$S3_BUCKET" --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM --region "$AWS_REGION" --no-confirm-changeset --no-fail-on-empty-changeset
           fi
-
+          cd ..
           # Save the stack name to a file so the subsequent step can query it
           echo "$STACK_NAME" > /tmp/stack-name
 
       - name: Show Stack Outputs
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
           STACK_NAME="${{ secrets.SAM_STACK_NAME }}"
           # If deploy wrote the runtime stack name, use that
@@ -90,4 +102,4 @@ jobs:
             STACK_NAME=$(cat /tmp/stack-name)
           fi
           echo "Querying outputs for stack: $STACK_NAME"
-          aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region ${{ secrets.AWS_REGION }} --query "Stacks[0].Outputs" --output table
+          aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$AWS_REGION" --query 'Stacks[0].Outputs' --output table
