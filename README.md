@@ -1,4 +1,4 @@
-#Healthcare AI on AWS Project  
+# Healthcare AI on AWS Project  
 
 This project demonstrates how to build a healthcare application using **AWS cloud services** combined with **AI (Amazon Bedrock)**.  
 It is designed to showcase both **cloud architecture skills** and **AI/ML integration**, targeting real-world healthcare use cases.  
